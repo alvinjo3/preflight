@@ -41,7 +41,19 @@ function ok(payload: unknown) {
   };
 }
 
-function fail(message: string) {
+/**
+ * An infrastructure failure is NOT a risk verdict.
+ *
+ * Returning BLOCK when the upstream feed is rate-limited says "this token is
+ * dangerous" when the truth is "I never looked at it". That defames clean
+ * tokens and, worse, teaches the calling agent to distrust real BLOCKs.
+ *
+ * So failure gets its own verdict. UNAVAILABLE never fails open (the agent is
+ * told not to proceed on an unchecked transaction) but it never pretends to be
+ * a finding about the token either. `retryable` lets a caller back off and try
+ * again instead of abandoning a legitimate trade.
+ */
+function fail(message: string, retryable = false) {
   return {
     isError: true,
     content: [
@@ -50,9 +62,16 @@ function fail(message: string) {
         text: JSON.stringify(
           {
             schema: "preflight.error.v1",
-            verdict: "BLOCK",
+            verdict: "UNAVAILABLE",
+            retryable,
             error: message,
-            summary: `BLOCK. Preflight could not complete the check: ${message} Do not proceed on an unchecked transaction.`,
+            summary:
+              `UNAVAILABLE. Preflight could not complete the check: ${message} ` +
+              `This is NOT a finding about the target - no assessment was made. ` +
+              (retryable
+                ? "Upstream data is temporarily unreachable; retry shortly. "
+                : "") +
+              `Do not proceed on an unchecked transaction.`,
           },
           null,
           2
@@ -61,6 +80,17 @@ function fail(message: string) {
     ],
   };
 }
+
+/** Upstream throttling and timeouts are transient - flag them as retryable. */
+const isTransient = (msg: string) =>
+  /too many requests|rate.?limit|429|timeout|abort|upstream 5\d\d|fetch failed|ECONNRESET/i.test(
+    msg
+  );
+
+const failFrom = (e: any) => {
+  const msg = String(e?.message ?? e);
+  return fail(msg, isTransient(msg));
+};
 
 function buildServer(): McpServer {
   const server = new McpServer({
@@ -105,7 +135,7 @@ function buildServer(): McpServer {
           },
         });
       } catch (e: any) {
-        return fail(String(e?.message ?? e));
+        return failFrom(e);
       }
     }
   );
@@ -136,7 +166,7 @@ function buildServer(): McpServer {
           target: { type: "address", address: addr, chain, chain_id: chainId },
         });
       } catch (e: any) {
-        return fail(String(e?.message ?? e));
+        return failFrom(e);
       }
     }
   );
@@ -177,7 +207,7 @@ function buildServer(): McpServer {
               : "Do not approve. Revoke any existing allowance to this spender.",
         });
       } catch (e: any) {
-        return fail(String(e?.message ?? e));
+        return failFrom(e);
       }
     }
   );
