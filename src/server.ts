@@ -224,6 +224,24 @@ app.post("/mcp", async (req: Request, res: Response) => {
   }
 });
 
+// MCP is POST-only in stateless mode. The spec expects a JSON-RPC 405 for
+// GET (SSE stream) and DELETE (session teardown), not an HTML 404 — some
+// clients and validators probe these before they trust the endpoint.
+const methodNotAllowed = (_req: Request, res: Response) => {
+  res.status(405).json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message:
+        "Method not allowed. This is a stateless MCP endpoint — send JSON-RPC via POST /mcp.",
+    },
+    id: null,
+  });
+};
+
+app.get("/mcp", methodNotAllowed);
+app.delete("/mcp", methodNotAllowed);
+
 const PORT = Number(process.env.PORT ?? 3000);
 app.listen(PORT, () => {
   console.log(`preflight ASP listening on :${PORT}  (MCP at POST /mcp)`);
