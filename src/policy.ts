@@ -1,5 +1,5 @@
 /**
- * policy.ts — the decision engine.
+ * policy.ts - the decision engine.
  *
  * Raw threat data is not a product. Agents cannot act on a 40-field JSON blob.
  * They need a verdict they can branch on, and a reason they can show the human.
@@ -18,13 +18,13 @@ export type RiskTolerance = "strict" | "balanced" | "degen";
 /**
  * The distinction the whole engine turns on.
  *
- *   scam   — hidden or deceptive. Designed to trap the holder. Never excusable.
- *   issuer — a centralised power the issuer openly holds (freeze, pause, mint).
+ *   scam   - hidden or deceptive. Designed to trap the holder. Never excusable.
+ *   issuer - a centralised power the issuer openly holds (freeze, pause, mint).
  *            On an unknown memecoin this is a rug vector. On a regulated
  *            stablecoin it is a disclosed, expected, priced-in property.
  *            Same raw flag, opposite meaning. Context decides.
- *   market — liquidity and concentration risk.
- *   meta   — data quality signals.
+ *   market - liquidity and concentration risk.
+ *   meta   - data quality signals.
  */
 export type FindingClass = "scam" | "issuer" | "market" | "meta";
 
@@ -211,7 +211,7 @@ export function decide(
   //
   // USDT can blacklist, pause, and mint. Those flags are TRUE, and a naive
   // engine BLOCKs the most-traded stablecoin on earth. But a regulated issuer's
-  // freeze function is a disclosed property, not a hidden trap — every holder
+  // freeze function is a disclosed property, not a hidden trap - every holder
   // already accepts it. Demote issuer powers on a trusted asset to advisory,
   // and say so plainly rather than silently dropping them: the agent still
   // deserves to know Tether can freeze its funds.
@@ -224,7 +224,7 @@ export function decide(
         ? {
             ...f,
             severity: "low" as Severity,
-            message: `${f.message} Disclosed issuer power of a known asset, not a hidden trap — factored as advisory, not blocking.`,
+            message: `${f.message} Disclosed issuer power of a known asset, not a hidden trap - factored as advisory, not blocking.`,
           }
         : f
     );
@@ -245,7 +245,7 @@ export function decide(
   risk = Math.max(0, Math.min(100, Math.round(risk)));
 
   // Critical is evaluated AFTER demotion, so a trusted asset's issuer powers
-  // cannot force a block — but a genuine scam finding still can.
+  // cannot force a block - but a genuine scam finding still can.
   const hasCritical = findings.some((f) => f.severity === "critical");
 
   let verdict: Verdict;
@@ -269,7 +269,7 @@ export function decide(
         ? `WARN (risk ${risk}/100). Proceed only with explicit human approval. ${blocking.join(" ")}`
         : `ALLOW (risk ${risk}/100). No blocking issues under "${tolerance}" policy.` +
           (advisories
-            ? ` ${advisories} disclosed issuer power(s) noted — see findings.`
+            ? ` ${advisories} disclosed issuer power(s) noted - see findings.`
             : "");
 
   return {
