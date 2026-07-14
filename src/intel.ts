@@ -30,7 +30,35 @@ export function isAddress(v: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(v.trim());
 }
 
-async function getJson(url: string, timeoutMs = 8000): Promise<any> {
+/**
+ * Serialised request queue with a minimum gap between upstream calls.
+ *
+ * GoPlus rate-limits the keyless tier. A caller scanning 20 tokens in a loop
+ * will trip it, and a throttle error surfacing as a verdict is far worse than
+ * a slightly slower answer. Queue the calls, space them, and retry transient
+ * failures with backoff before ever giving up.
+ */
+const MIN_GAP_MS = 350;
+let chain: Promise<unknown> = Promise.resolve();
+let lastCall = 0;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function throttle<T>(fn: () => Promise<T>): Promise<T> {
+  const run = chain.then(async () => {
+    const wait = MIN_GAP_MS - (Date.now() - lastCall);
+    if (wait > 0) await sleep(wait);
+    lastCall = Date.now();
+    return fn();
+  });
+  // keep the chain alive even when a call rejects
+  chain = run.catch(() => {});
+  return run as Promise<T>;
+}
+
+const RETRYABLE = /429|too many requests|rate.?limit|upstream 5\d\d/i;
+
+async function fetchOnce(url: string, timeoutMs: number): Promise<any> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);
   try {
@@ -38,6 +66,7 @@ async function getJson(url: string, timeoutMs = 8000): Promise<any> {
       signal: ctl.signal,
       headers: { accept: "application/json" },
     });
+    if (res.status === 429) throw new Error("upstream 429 too many requests");
     if (!res.ok) throw new Error(`upstream ${res.status}`);
     const body = await res.json();
     if (body?.code !== 1 && body?.code !== undefined && body?.code !== 0) {
@@ -48,6 +77,22 @@ async function getJson(url: string, timeoutMs = 8000): Promise<any> {
   } finally {
     clearTimeout(t);
   }
+}
+
+async function getJson(url: string, timeoutMs = 8000): Promise<any> {
+  return throttle(async () => {
+    let lastErr: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await fetchOnce(url, timeoutMs);
+      } catch (e: any) {
+        lastErr = e;
+        if (!RETRYABLE.test(String(e?.message ?? e))) throw e;
+        await sleep(500 * 2 ** attempt); // 500ms, 1s
+      }
+    }
+    throw lastErr;
+  });
 }
 
 export type TokenIntel = Record<string, any> & { _found: boolean };
