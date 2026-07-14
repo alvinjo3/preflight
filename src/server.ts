@@ -1,5 +1,5 @@
 /**
- * server.ts — Preflight A2MCP service.
+ * server.ts - Preflight A2MCP service.
  *
  * Exposes an MCP streamable-HTTP endpoint at POST /mcp.
  * Stateless: one server + transport per request, so it scales horizontally
@@ -225,7 +225,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
 });
 
 // MCP is POST-only in stateless mode. The spec expects a JSON-RPC 405 for
-// GET (SSE stream) and DELETE (session teardown), not an HTML 404 — some
+// GET (SSE stream) and DELETE (session teardown), not an HTML 404 - some
 // clients and validators probe these before they trust the endpoint.
 const methodNotAllowed = (_req: Request, res: Response) => {
   res.status(405).json({
@@ -233,7 +233,7 @@ const methodNotAllowed = (_req: Request, res: Response) => {
     error: {
       code: -32000,
       message:
-        "Method not allowed. This is a stateless MCP endpoint — send JSON-RPC via POST /mcp.",
+        "Method not allowed. This is a stateless MCP endpoint - send JSON-RPC via POST /mcp.",
     },
     id: null,
   });
